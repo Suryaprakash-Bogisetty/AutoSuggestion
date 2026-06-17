@@ -13,6 +13,9 @@ PURPOSE_HINTS = {
     "investigations":  "Focus on lab tests, imaging, or diagnostic procedures.",
     "medications":     "Focus on drug names, dosage, or treatment regimens.",
     "procedures":      "Focus on clinical or surgical procedure names.",
+    "vitals":          "Focus on vital sign values such as temperature, pulse, BP, SpO2, or respiratory rate.",
+    "advice_followup": "Focus on patient advice, lifestyle instructions, or follow-up schedule.",
+    "doctors_notes":   "Focus on clinical observations, impressions, or treatment plan notes by the doctor.",
 }
 
 

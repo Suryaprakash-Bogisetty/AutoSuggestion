@@ -23,6 +23,9 @@ class Purpose(str, Enum):
     investigations = "investigations"
     medications = "medications"
     procedures = "procedures"
+    vitals = "vitals"
+    advice_followup = "advice_followup"
+    doctors_notes = "doctors_notes"
 
 
 class SuggestRequest(BaseModel):
