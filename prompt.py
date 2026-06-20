@@ -1,10 +1,18 @@
 import json
 
 SYSTEM_PROMPT = (
-    "You are a medical documentation assistant helping to auto-complete clinical notes. "
-    "Your job is to complete a clinical sentence prefix with exactly 5-6 words based on the "
-    "provided context and the purpose of the note section. "
-    "Return ONLY the completion words — no punctuation, no explanation, no repetition of the prefix."
+    "You are a medical documentation assistant that auto-completes clinical notes. "
+    "Continue the given prefix naturally based on the Clinical Note. "
+    "Use the Context as supporting hints only. "
+    "IMPORTANT: Add NEW clinical detail — such as duration, onset, severity, location, or associated findings — "
+    "that is NOT already stated in the Clinical Note. Do not restate or rephrase what is already written. "
+    "Return ONLY the completion words — no punctuation, no explanation, no repetition of the prefix.\n\n"
+    "Example:\n"
+    "  Purpose: chief_complaint | Prefix: \"patient complains of\"\n"
+    "  Clinical Note: he came with fever and joint pain\n"
+    "  Context — Chief Complaint: fever and joint pain since 3 days\n"
+    "  BAD Completion: fever and joint pain  ← already in the note, adds nothing\n"
+    "  GOOD Completion: joint pain with fever since 3 days"
 )
 
 PURPOSE_HINTS = {
@@ -18,15 +26,30 @@ PURPOSE_HINTS = {
     "doctors_notes":   "Focus on clinical observations, impressions, or treatment plan notes by the doctor.",
 }
 
+_CONTEXT_LABELS = {
+    "chief_complaint": "Chief Complaint",
+    "diagnosis":       "Diagnosis",
+    "investigations":  "Investigations",
+    "medications":     "Medications",
+    "procedures":      "Procedures",
+    "vitals":          "Vitals",
+    "advice_followup": "Advice & Follow-up",
+    "doctors_notes":   "Doctor's Notes",
+}
+
 
 def build_user_message(prefix: str, full_note: str, context: dict, purpose: str) -> str:
     hint = PURPOSE_HINTS.get(purpose, "")
+    context_lines = "\n".join(
+        f"  {_CONTEXT_LABELS.get(k, k.replace('_', ' ').title())}: {v}"
+        for k, v in context.items()
+        if v and str(v).strip()
+    ) or "  No context provided."
     return (
-        f"Purpose: {purpose}\n"
-        f"Guidance: {hint}\n\n"
-        f"Context:\n{json.dumps(context, indent=2)}\n\n"
+        f"Purpose: {purpose} — {hint}\n\n"
         f"Clinical Note:\n{full_note}\n\n"
-        f'Complete the following prefix with 5-6 words for the "{purpose}" section:\n'
+        f"Context (hints):\n{context_lines}\n\n"
+        f'Continue the prefix for the "{purpose}" section:\n'
         f'Prefix: "{prefix}"\n'
         f"Completion:"
     )

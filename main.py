@@ -57,12 +57,55 @@ client = AsyncOpenAI(
 )
 
 
+def _clean_note(text: str) -> str:
+    """Remove repeated phrases to prevent model echoing."""
+    words = text.split()
+    if len(words) < 6:
+        return text
+    # Sliding window: find the earliest repeated 5-word phrase and truncate there
+    window = 5
+    seen_phrases = {}
+    for i in range(len(words) - window + 1):
+        phrase = " ".join(words[i : i + window]).lower()
+        if phrase in seen_phrases:
+            # Truncate at the second occurrence
+            return " ".join(words[: i]).strip()
+        seen_phrases[phrase] = i
+    return text
+
+
 def _extract_completion(raw: str) -> str:
-    """Strip <think>...</think> reasoning blocks then return first 5-6 words."""
+    """Strip <think>...</think> reasoning blocks then return first 6 words."""
     cleaned = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
     if not cleaned:
         cleaned = raw.strip()
     return " ".join(cleaned.split()[:6])
+
+
+def _sanitize(text: str) -> str:
+    """Strip non-ASCII characters and normalize whitespace."""
+    return re.sub(r"[^\x00-\x7F]+", "", text).strip()
+
+
+_STOP_WORDS = {
+    "the", "a", "an", "and", "or", "of", "with", "in", "on", "is", "has",
+    "he", "she", "it", "to", "for", "at", "by", "as", "was", "be", "are",
+    "from", "his", "her", "have", "had", "this", "that", "are", "not", "no",
+}
+
+
+def _content_words(text: str) -> set:
+    return {w.lower() for w in re.findall(r"[a-zA-Z]+", text) if w.lower() not in _STOP_WORDS and len(w) > 2}
+
+
+def _is_near_echo(suggestion: str, full_note: str) -> bool:
+    """Return True if 90%+ of the suggestion's content words are already in the note."""
+    s_words = _content_words(suggestion)
+    if not s_words:
+        return False
+    n_words = _content_words(full_note)
+    overlap = s_words & n_words
+    return len(overlap) / len(s_words) >= 0.9
 
 
 @app.post("/suggest", response_model=SuggestResponse)
@@ -71,9 +114,11 @@ async def suggest(request: Request, req: SuggestRequest):
     if not DEEPINFRA_API_KEY:
         raise HTTPException(status_code=500, detail="DEEPINFRA_API_KEY is not configured")
 
+    cleaned_note = _clean_note(req.full_note)
+
     user_message = build_user_message(
         prefix=req.prefix,
-        full_note=req.full_note,
+        full_note=cleaned_note,
         context=req.context,
         purpose=req.purpose.value,
     )
@@ -113,7 +158,11 @@ async def suggest(request: Request, req: SuggestRequest):
 
     duration_ms = round((time.monotonic() - start) * 1000)
     raw_content = response.choices[0].message.content or ""
-    suggestion = _extract_completion(raw_content)
+    suggestion = _sanitize(_extract_completion(raw_content))
+
+    if _is_near_echo(suggestion, req.full_note):
+        log.info("suggest_near_echo_detected", extra={"patient_id": req.patient_id, "suggestion": suggestion})
+        suggestion = ""
 
     log.info(
         "suggest_response",
@@ -128,7 +177,7 @@ async def suggest(request: Request, req: SuggestRequest):
 
     return SuggestResponse(
         suggestion=suggestion,
-        full_text=f"{req.prefix} {suggestion}",
+        full_text=f"{req.prefix} {suggestion}".strip(),
         purpose=req.purpose.value,
         prompt=user_message if req.debug else None,
     )
