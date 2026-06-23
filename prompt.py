@@ -1,29 +1,34 @@
-import json
+SYSTEM_PROMPT = ("""You are a medical note autocomplete assistant.
 
-SYSTEM_PROMPT = (
-    "You are a medical documentation assistant that auto-completes clinical notes. "
-    "Continue the given prefix naturally based on the Clinical Note. "
-    "Use the Context as supporting hints only. "
-    "IMPORTANT: Add NEW clinical detail — such as duration, onset, severity, location, or associated findings — "
-    "that is NOT already stated in the Clinical Note. Do not restate or rephrase what is already written. "
-    "Return ONLY the completion words — no punctuation, no explanation, no repetition of the prefix.\n\n"
-    "Example:\n"
-    "  Purpose: chief_complaint | Prefix: \"patient complains of\"\n"
-    "  Clinical Note: he came with fever and joint pain\n"
-    "  Context — Chief Complaint: fever and joint pain since 3 days\n"
-    "  BAD Completion: fever and joint pain  ← already in the note, adds nothing\n"
-    "  GOOD Completion: joint pain with fever since 3 days"
-)
+Your task is to predict the next words a doctor is most likely to type.
 
+Use:
+- the text already written
+- the current note section
+- the available clinical context
+
+Rules:
+1. Understand the entire note before generating a suggestion.
+2. Predict the most likely continuation of the doctor's text.
+3. Continue naturally from the current cursor position.
+4. Use relevant clinical context when helpful.
+5. Prefer likely continuation over introducing new information.
+6. Maintain proper grammar and clinical documentation style.
+7. Keep suggestions concise, typically 2-12 words.
+8. Do not repeat text that appears immediately before the cursor.
+9. Do not invent unsupported medical facts.
+10. Do not explain your reasoning.
+
+Return only the continuation text.""")
 PURPOSE_HINTS = {
-    "chief_complaint": "Focus on the patient's primary symptom or reason for visit.",
-    "diagnosis":       "Focus on disease or condition names relevant to the note.",
-    "investigations":  "Focus on lab tests, imaging, or diagnostic procedures.",
-    "medications":     "Focus on drug names, dosage, or treatment regimens.",
-    "procedures":      "Focus on clinical or surgical procedure names.",
-    "vitals":          "Focus on vital sign values such as temperature, pulse, BP, SpO2, or respiratory rate.",
-    "advice_followup": "Focus on patient advice, lifestyle instructions, or follow-up schedule.",
-    "doctors_notes":   "Focus on clinical observations, impressions, or treatment plan notes by the doctor.",
+    "chief_complaint": "Continue with the symptom name, body location, onset, or duration.",
+    "diagnosis":       "Continue with a disease or condition name supported by the note.",
+    "investigations":  "Continue with a specific lab test, imaging study, or diagnostic procedure name.",
+    "medications":     "Continue with a drug name and dosage only. Do not add time durations or instructions.",
+    "procedures":      "Continue with a specific clinical or surgical procedure name.",
+    "vitals":          "Continue with a numeric vital sign value such as temperature, BP, SpO2, or pulse.",
+    "advice_followup": "Continue with a specific patient instruction or follow-up timeline.",
+    "doctors_notes":   "Continue with a clinical observation, impression, or next step in the treatment plan.",
 }
 
 _CONTEXT_LABELS = {
@@ -38,18 +43,19 @@ _CONTEXT_LABELS = {
 }
 
 
-def build_user_message(prefix: str, full_note: str, context: dict, purpose: str) -> str:
+def build_user_message(text_before_cursor: str, context: dict, purpose: str) -> str:
     hint = PURPOSE_HINTS.get(purpose, "")
-    context_lines = "\n".join(
+    label = _CONTEXT_LABELS.get(purpose, purpose.replace("_", " ").title())
+
+    other_lines = "\n".join(
         f"  {_CONTEXT_LABELS.get(k, k.replace('_', ' ').title())}: {v}"
         for k, v in context.items()
-        if v and str(v).strip()
-    ) or "  No context provided."
+        if k != purpose and v and str(v).strip()
+    ) or "  No other fields filled."
+
     return (
         f"Purpose: {purpose} — {hint}\n\n"
-        f"Clinical Note:\n{full_note}\n\n"
-        f"Context (hints):\n{context_lines}\n\n"
-        f'Continue the prefix for the "{purpose}" section:\n'
-        f'Prefix: "{prefix}"\n'
-        f"Completion:"
+        f"Other Fields (hints):\n{other_lines}\n\n"
+        f"Text Before Cursor:\n{text_before_cursor}\n\n"
+        f"Predict the next words:"
     )
