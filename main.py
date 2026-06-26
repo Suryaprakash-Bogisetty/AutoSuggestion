@@ -4,15 +4,20 @@ from enum import Enum
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI, APITimeoutError, APIStatusError
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from config import DEEPINFRA_API_KEY, DEEPINFRA_BASE_URL, MODEL_ID, RATE_LIMIT, REQUEST_TIMEOUT
+from config import (
+    DEEPINFRA_API_KEY, DEEPINFRA_BASE_URL, MODEL_ID, RATE_LIMIT, REQUEST_TIMEOUT,
+    REPHRASE_MODEL_ID, REPHRASE_TIMEOUT, REPHRASE_RATE_LIMIT,
+    REPHRASE_TEMPERATURE, REPHRASE_MAX_TOKENS, REPHRASE_TOP_P, REPHRASE_FREQUENCY_PENALTY,
+)
 from logger import get_logger
-from prompt import SYSTEM_PROMPT, build_user_message
+from prompt import SYSTEM_PROMPT, build_user_message, REPHRASE_SYSTEM_PROMPT, build_rephrase_user_message
 
 log = get_logger("autosuggestion")
 
@@ -41,6 +46,22 @@ class SuggestResponse(BaseModel):
     suggestion: str
     full_text: str
     purpose: str
+    prompt: Optional[str] = None
+
+
+class RephraseRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000)
+    purpose: Optional[Purpose] = None
+    context: dict[str, Any] = {}
+    patient_id: Optional[str] = None
+    debug: bool = False
+
+
+class RephraseResponse(BaseModel):
+    rephrased: str
+    original: str
+    purpose: Optional[str] = None
+    fallback: bool = False
     prompt: Optional[str] = None
 
 
@@ -96,9 +117,10 @@ def _has_real_text(text: str) -> bool:
 
 
 def _sanitize(text: str) -> str:
-    """Strip non-ASCII characters, trailing ellipsis/artifacts, and normalize whitespace."""
-    text = re.sub(r"[^\x00-\x7F]+", "", text)
-    text = re.sub(r"\.{2,}$", "", text)   # trailing "..." or ".."
+    """Strip non-ASCII except whitelisted clinical symbols, remove trailing ellipsis."""
+    # °  degree (temperature), μ  micro (μg), ≥≤ comparators, ±  plus-minus
+    text = re.sub(r"[^\x00-\x7F°μ≥≤±]", "", text)
+    text = re.sub(r"\.{2,}$", "", text)
     return text.strip()
 
 
@@ -121,6 +143,67 @@ def _is_near_echo(suggestion: str, text_before_cursor: str) -> bool:
     n_words = _content_words(text_before_cursor)
     overlap = s_words & n_words
     return len(overlap) / len(s_words) >= 0.75
+
+
+def _strip_think_blocks(text: str) -> str:
+    """Remove <think>...</think> blocks from LLM output."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+
+# Word immediately before a dosage pattern is treated as a drug name.
+_DOSAGE_RE = re.compile(
+    r"\b([A-Za-z][a-z]{2,})\s+\d+\s*(?:mg|mcg|g\b|ml|mL|L\b|IU|units?|tabs?|caps?)",
+    re.IGNORECASE,
+)
+
+
+def _extract_drug_names(text: str) -> set:
+    """Return lowercase drug names identified by dosage-proximity heuristic."""
+    return {m.lower() for m in _DOSAGE_RE.findall(text)}
+
+
+_LONG_NOTE_THRESHOLD = 50  # words
+
+
+def _pick_model(purpose: Optional[str], text: str) -> tuple[str, float]:
+    """Return (model_id, timeout) for this rephrase request.
+
+    72B is used only for long doctor's notes — where structure quality matters.
+    7B is used for everything else — same accuracy, 3x faster.
+    """
+    if purpose == Purpose.doctors_notes.value and len(text.split()) > _LONG_NOTE_THRESHOLD:
+        return REPHRASE_MODEL_ID, REPHRASE_TIMEOUT
+    return MODEL_ID, REQUEST_TIMEOUT
+
+
+def _validate_rephrased_output(original: str, rephrased: str) -> bool:
+    """Return True if the rephrased text is safe to use.
+
+    Checks: non-empty, reasonable length ratio, numeric values preserved, drug names preserved.
+    """
+    if not rephrased:
+        return False
+    orig_words = original.split()
+    rep_words = rephrased.split()
+    if orig_words:
+        ratio = len(rep_words) / len(orig_words)
+        if ratio < 0.4 or ratio > 3.0:
+            return False
+    # No \b — units like 325mg/4L/101.4F have no word boundary after the digit.
+    # Single-digit integers excluded: may become Roman numerals (II/III) or words ("two days").
+    orig_numbers = {n for n in re.findall(r"\d+(?:\.\d+)?", original)
+                    if float(n) >= 10 or "." in n}
+    if orig_numbers:
+        rep_numbers = set(re.findall(r"\d+(?:\.\d+)?", rephrased))
+        if not orig_numbers.issubset(rep_numbers):
+            return False
+    # Drug names must survive unchanged
+    orig_drugs = _extract_drug_names(original)
+    if orig_drugs:
+        rep_lower = rephrased.lower()
+        if any(drug not in rep_lower for drug in orig_drugs):
+            return False
+    return True
 
 
 @app.post("/suggest", response_model=SuggestResponse)
@@ -198,6 +281,188 @@ async def suggest(request: Request, req: SuggestRequest):
         purpose=req.purpose.value,
         prompt=user_message if req.debug else None,
     )
+
+
+@app.post("/rephrase", response_model=RephraseResponse)
+@limiter.limit(REPHRASE_RATE_LIMIT)
+async def rephrase(request: Request, req: RephraseRequest):
+    if not DEEPINFRA_API_KEY:
+        raise HTTPException(status_code=500, detail="DEEPINFRA_API_KEY is not configured")
+
+    if not _has_real_text(req.text):
+        log.info("rephrase_skipped_garbage", extra={"patient_id": req.patient_id})
+        return RephraseResponse(
+            rephrased=req.text,
+            original=req.text,
+            purpose=req.purpose.value if req.purpose else None,
+            fallback=True,
+        )
+
+    purpose_str = req.purpose.value if req.purpose else None
+    model, timeout = _pick_model(purpose_str, req.text)
+
+    user_message = build_rephrase_user_message(
+        text=req.text,
+        purpose=purpose_str,
+        context=req.context,
+    )
+
+    log.info(
+        "rephrase_request",
+        extra={
+            "patient_id": req.patient_id,
+            "purpose": purpose_str,
+            "model": model,
+            "text_preview": req.text[:100],
+        },
+    )
+
+    start = time.monotonic()
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": REPHRASE_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            max_tokens=REPHRASE_MAX_TOKENS,
+            temperature=REPHRASE_TEMPERATURE,
+            top_p=REPHRASE_TOP_P,
+            frequency_penalty=REPHRASE_FREQUENCY_PENALTY,
+            timeout=timeout,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+    except APITimeoutError:
+        log.error("deepinfra_timeout_rephrase", extra={"patient_id": req.patient_id})
+        raise HTTPException(status_code=504, detail="Model inference timed out. Please retry.")
+    except APIStatusError as e:
+        log.error(
+            "deepinfra_error_rephrase",
+            extra={"patient_id": req.patient_id, "status_code": e.status_code, "error_message": str(e)},
+        )
+        raise HTTPException(status_code=502, detail=f"Model API error: {e.message}")
+
+    duration_ms = round((time.monotonic() - start) * 1000)
+    raw_content = response.choices[0].message.content or ""
+    rephrased = _sanitize(_strip_think_blocks(raw_content))
+
+    fallback = not _validate_rephrased_output(req.text, rephrased)
+    if fallback:
+        log.info("rephrase_fallback", extra={"patient_id": req.patient_id, "raw": raw_content[:100]})
+        rephrased = req.text
+
+    log.info(
+        "rephrase_response",
+        extra={
+            "patient_id": req.patient_id,
+            "purpose": purpose_str,
+            "model": model,
+            "rephrased_preview": rephrased[:100],
+            "fallback": fallback,
+            "duration_ms": duration_ms,
+        },
+    )
+
+    return RephraseResponse(
+        rephrased=rephrased,
+        original=req.text,
+        purpose=purpose_str,
+        fallback=fallback,
+        prompt=user_message if req.debug else None,
+    )
+
+
+@app.post("/rephrase/stream")
+@limiter.limit(REPHRASE_RATE_LIMIT)
+async def rephrase_stream(request: Request, req: RephraseRequest):
+    if not DEEPINFRA_API_KEY:
+        raise HTTPException(status_code=500, detail="DEEPINFRA_API_KEY is not configured")
+
+    if not _has_real_text(req.text):
+        async def _fallback_gen():
+            yield f"data: {req.text}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(_fallback_gen(), media_type="text/event-stream")
+
+    purpose_str = req.purpose.value if req.purpose else None
+    model, timeout = _pick_model(purpose_str, req.text)
+
+    user_message = build_rephrase_user_message(
+        text=req.text,
+        purpose=purpose_str,
+        context=req.context,
+    )
+
+    log.info(
+        "rephrase_stream_request",
+        extra={
+            "patient_id": req.patient_id,
+            "purpose": purpose_str,
+            "model": model,
+            "text_preview": req.text[:100],
+        },
+    )
+
+    async def _stream_gen():
+        buffer = ""
+        in_think = False
+        try:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": REPHRASE_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=REPHRASE_MAX_TOKENS,
+                temperature=REPHRASE_TEMPERATURE,
+                top_p=REPHRASE_TOP_P,
+                frequency_penalty=REPHRASE_FREQUENCY_PENALTY,
+                timeout=timeout,
+                stream=True,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            )
+            async for chunk in stream:
+                token = chunk.choices[0].delta.content or ""
+                if not token:
+                    continue
+                buffer += token
+                # Filter <think> blocks on the fly
+                while True:
+                    if in_think:
+                        end = buffer.find("</think>")
+                        if end != -1:
+                            buffer = buffer[end + len("</think>"):]
+                            in_think = False
+                        else:
+                            buffer = ""
+                            break
+                    else:
+                        start_idx = buffer.find("<think>")
+                        if start_idx != -1:
+                            safe = buffer[:start_idx]
+                            if safe:
+                                yield f"data: {safe}\n\n"
+                            buffer = buffer[start_idx + len("<think>"):]
+                            in_think = True
+                        else:
+                            # Keep 8-char tail to catch "</think>" split across chunks
+                            cutoff = max(0, len(buffer) - 8)
+                            if cutoff > 0:
+                                yield f"data: {buffer[:cutoff]}\n\n"
+                                buffer = buffer[cutoff:]
+                            break
+            # Flush remainder
+            if buffer and not in_think:
+                clean = _sanitize(buffer)
+                if clean:
+                    yield f"data: {clean}\n\n"
+        except (APITimeoutError, APIStatusError) as e:
+            log.error("rephrase_stream_error", extra={"patient_id": req.patient_id, "error": str(e)})
+            yield "event: error\ndata: inference failed\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(_stream_gen(), media_type="text/event-stream")
 
 
 @app.get("/health")
