@@ -1,10 +1,13 @@
+import json
 import re
 import time
 from enum import Enum
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI, APITimeoutError, APIStatusError
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -31,6 +34,8 @@ class Purpose(str, Enum):
     vitals = "vitals"
     advice_followup = "advice_followup"
     doctors_notes = "doctors_notes"
+    clinical_notes = "clinical_notes"
+    summary = "summary"
 
 
 class SuggestRequest(BaseModel):
@@ -70,6 +75,18 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[RATE_LIMIT])
 app = FastAPI(title="AutoSuggestion API", version="1.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/")
+async def ui():
+    return FileResponse("static/index.html")
 
 client = AsyncOpenAI(
     api_key=DEEPINFRA_API_KEY,
@@ -380,7 +397,7 @@ async def rephrase_stream(request: Request, req: RephraseRequest):
 
     if not _has_real_text(req.text):
         async def _fallback_gen():
-            yield f"data: {req.text}\n\n"
+            yield f"data: {json.dumps(req.text)}\n\n"
             yield "data: [DONE]\n\n"
         return StreamingResponse(_fallback_gen(), media_type="text/event-stream")
 
@@ -441,21 +458,21 @@ async def rephrase_stream(request: Request, req: RephraseRequest):
                         if start_idx != -1:
                             safe = buffer[:start_idx]
                             if safe:
-                                yield f"data: {safe}\n\n"
+                                yield f"data: {json.dumps(safe)}\n\n"
                             buffer = buffer[start_idx + len("<think>"):]
                             in_think = True
                         else:
                             # Keep 8-char tail to catch "</think>" split across chunks
                             cutoff = max(0, len(buffer) - 8)
                             if cutoff > 0:
-                                yield f"data: {buffer[:cutoff]}\n\n"
+                                yield f"data: {json.dumps(buffer[:cutoff])}\n\n"
                                 buffer = buffer[cutoff:]
                             break
             # Flush remainder
             if buffer and not in_think:
                 clean = _sanitize(buffer)
                 if clean:
-                    yield f"data: {clean}\n\n"
+                    yield f"data: {json.dumps(clean)}\n\n"
         except (APITimeoutError, APIStatusError) as e:
             log.error("rephrase_stream_error", extra={"patient_id": req.patient_id, "error": str(e)})
             yield "event: error\ndata: inference failed\n\n"

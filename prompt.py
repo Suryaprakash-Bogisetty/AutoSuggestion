@@ -1,3 +1,5 @@
+
+
 SYSTEM_PROMPT = ("""You are a medical note autocomplete assistant.
 
 Your task is to predict the next words a doctor is most likely to type.
@@ -29,6 +31,8 @@ PURPOSE_HINTS = {
     "vitals":          "Continue with a numeric vital sign value such as temperature, BP, SpO2, or pulse.",
     "advice_followup": "Continue with a specific patient instruction or follow-up timeline.",
     "doctors_notes":   "Continue with a clinical observation, impression, or next step in the treatment plan.",
+    "summary":         "Continue with a concise summary of the patient's condition and key findings.",
+    "clinical_notes":  "Continue with detailed clinical observations, history, and examination findings.",
 }
 
 _CONTEXT_LABELS = {
@@ -40,8 +44,9 @@ _CONTEXT_LABELS = {
     "vitals":          "Vitals",
     "advice_followup": "Advice & Follow-up",
     "doctors_notes":   "Doctor's Notes",
+    "summary":         "Summary",
+    "clinical_notes":  "Clinical Notes",
 }
-
 
 REPHRASE_PURPOSE_HINTS = {
     "chief_complaint": "Rephrase to describe the symptom, body location, onset, and duration using clinical terminology.",
@@ -52,6 +57,8 @@ REPHRASE_PURPOSE_HINTS = {
     "vitals":          "Rephrase to state each vital sign clearly with appropriate labels and units.",
     "advice_followup": "Rephrase as clear, formal patient instructions with specific timelines.",
     "doctors_notes":   "Rephrase as a structured clinical note with formal observations, impressions, and management plan.",
+    "summary":         "Rephrase as a concise, formal medical summary highlighting key findings.",
+    "clinical_notes":  "Rephrase as a structured and professional clinical note, detailing history and exam findings.",
 }
 
 REPHRASE_SYSTEM_PROMPT = """You are a clinical documentation specialist. Your task is to rephrase medical notes written by doctors into formal, accurate, and concise clinical text.
