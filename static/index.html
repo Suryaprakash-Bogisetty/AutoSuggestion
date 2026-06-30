@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Medical Note Rephraser</title>
+<title>Medical Note Assistant</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -29,27 +29,61 @@
   .header-sub   { font-size: 12px; opacity: 0.75; margin-top: 1px; }
   .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
+  /* ── Tabs ───────────────────────────────────────────────────── */
+  .tab-nav {
+    display: flex;
+    gap: 4px;
+    padding: 12px 28px 0;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .tab-btn {
+    padding: 10px 22px;
+    border: none;
+    border-radius: 10px 10px 0 0;
+    background: #dbeafe;
+    color: #1e40af;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    letter-spacing: -0.2px;
+  }
+  .tab-btn:hover { background: #bfdbfe; }
+  .tab-btn.active {
+    background: white;
+    color: #1e40af;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+
   /* ── Layout ─────────────────────────────────────────────────── */
   .layout {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
-    padding: 20px 28px;
+    padding: 0 28px 20px;
     max-width: 1400px;
     margin: 0 auto;
   }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: contents; }
   @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 
   /* ── Card ───────────────────────────────────────────────────── */
   .card {
     background: white;
-    border-radius: 14px;
+    border-radius: 0 14px 14px 14px;
     padding: 22px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     display: flex;
     flex-direction: column;
     gap: 14px;
+    margin-top: 0;
   }
+  .card:first-child { border-top-left-radius: 0; }
   .card-title {
     font-size: 15px;
     font-weight: 700;
@@ -114,6 +148,63 @@
     color: white;
   }
 
+  /* ── Language grid ───────────────────────────────────────────── */
+  .lang-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+  }
+  .lang-btn {
+    padding: 10px 6px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    line-height: 1.3;
+  }
+  .lang-btn .lang-native {
+    font-size: 13px;
+    color: #6b7280;
+  }
+  .lang-btn:hover { border-color: #059669; color: #059669; background: #ecfdf5; }
+  .lang-btn:hover .lang-native { color: #059669; }
+  .lang-btn.active {
+    border-color: #059669;
+    background: #059669;
+    color: white;
+  }
+  .lang-btn.active .lang-native { color: rgba(255,255,255,0.85); }
+
+  /* ── Domain toggle ───────────────────────────────────────────── */
+  .domain-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+  .domain-btn {
+    padding: 9px 12px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .domain-btn:hover { border-color: #059669; color: #059669; background: #ecfdf5; }
+  .domain-btn.active { border-color: #059669; background: #059669; color: white; }
+
   /* ── Context section (collapsible) ─────────────────────────── */
   .context-toggle {
     display: flex;
@@ -150,8 +241,14 @@
   .btn-primary { background: #1a56db; color: white; }
   .btn-primary:hover { background: #1e40af; }
   .btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+  .btn-green { background: #059669; color: white; }
+  .btn-green:hover { background: #047857; }
+  .btn-green:disabled { background: #6ee7b7; cursor: not-allowed; }
   .btn-outline { background: white; color: #1a56db; border: 2px solid #1a56db; }
   .btn-outline:hover { background: #eff6ff; }
+  .btn-outline-green { background: white; color: #059669; border: 2px solid #059669; }
+  .btn-outline-green:hover { background: #ecfdf5; }
+  .btn-outline-green:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-clear  { background: #f9fafb; color: #6b7280; border: 1.5px solid #e5e7eb; font-size: 13px; padding: 9px; }
   .btn-clear:hover { background: #f3f4f6; }
 
@@ -175,6 +272,7 @@
     color: #1e40af;
   }
   .model-hint.m72 { background: #fef3c7; color: #92400e; }
+  .model-hint.gemini { background: #ecfdf5; color: #047857; }
 
   /* ── Output area ────────────────────────────────────────────── */
   .status-bar {
@@ -197,6 +295,7 @@
   .badge-fallback { background: #fef3c7; color: #92400e; }
   .badge-error    { background: #fee2e2; color: #991b1b; }
   .badge-stream   { background: #dbeafe; color: #1e40af; }
+  .badge-stream-green { background: #d1fae5; color: #065f46; }
   .badge-idle     { background: #f3f4f6; color: #6b7280; }
   .latency        { font-size: 12px; color: #6b7280; margin-left: auto; }
 
@@ -215,10 +314,15 @@
     overflow-y: auto;
     max-height: 480px;
   }
+  .output-box.translate-box {
+    font-size: 15.5px;
+    line-height: 1.9;
+    font-family: 'Noto Sans', 'Segoe UI', system-ui, sans-serif;
+  }
   .output-box.streaming { border-color: #93c5fd; }
+  .output-box.streaming-green { border-color: #6ee7b7; }
   .output-placeholder { color: #9ca3af; font-style: italic; }
 
-  /* Blinking cursor */
   .cursor {
     display: inline-block;
     width: 2px;
@@ -228,9 +332,9 @@
     vertical-align: text-bottom;
     animation: blink 0.9s step-start infinite;
   }
+  .cursor.green { background: #059669; }
   @keyframes blink { 50% { opacity: 0; } }
 
-  /* Markdown rendering in output */
   .output-box strong { font-weight: 700; }
   .output-box .md-h  { font-weight: 700; color: #1e40af; font-size: 13px; margin-top: 4px; }
   .output-box .md-li { margin-left: 16px; }
@@ -271,6 +375,9 @@
     animation: progress-anim 2.5s ease-in-out infinite;
     border-radius: 3px;
   }
+  .progress-fill.green {
+    background: linear-gradient(90deg, #059669, #34d399);
+  }
   @keyframes progress-anim {
     0%   { width: 0%;   margin-left: 0; }
     50%  { width: 60%;  margin-left: 20%; }
@@ -284,126 +391,246 @@
 <div class="header">
   <div class="header-icon">🏥</div>
   <div>
-    <div class="header-title">Medical Note Rephraser</div>
-    <div class="header-sub">AI-powered clinical documentation assistant</div>
+    <div class="header-title">Medical Note Assistant</div>
+    <div class="header-sub">AI-powered clinical documentation · rephrase & translate</div>
   </div>
   <div class="header-right">
     <div class="badge badge-pass" style="font-size:12px;" id="api-status">● API Ready</div>
   </div>
 </div>
 
+<!-- ── Tab nav ──────────────────────────────────────────────────── -->
+<div class="tab-nav">
+  <button class="tab-btn active" id="tab-btn-rephrase" onclick="switchTab('rephrase')">
+    ✏️ Rephrase
+  </button>
+  <button class="tab-btn" id="tab-btn-translate" onclick="switchTab('translate')">
+    🌐 Translate
+  </button>
+</div>
+
 <!-- ── Main layout ───────────────────────────────────────────────── -->
 <div class="layout">
 
-  <!-- ── LEFT: Input panel ──────────────────────────────────────── -->
-  <div class="card">
-    <div class="card-title">✏️ Input</div>
+  <!-- ════════════════════════════════════════════════════════════
+       TAB: REPHRASE
+  ════════════════════════════════════════════════════════════════ -->
+  <div class="tab-panel active" id="panel-rephrase">
 
-    <!-- Purpose selector -->
-    <div>
-      <label>Section Purpose</label>
-      <div class="purpose-grid" id="purpose-grid">
-        <button class="purpose-btn active" data-purpose="chief_complaint">Chief<br>Complaint</button>
-        <button class="purpose-btn" data-purpose="diagnosis">Diagnosis</button>
-        <button class="purpose-btn" data-purpose="investigations">Investiga-<br>tions</button>
-        <button class="purpose-btn" data-purpose="medications">Medications</button>
-        <button class="purpose-btn" data-purpose="procedures">Procedures</button>
-        <button class="purpose-btn" data-purpose="vitals">Vitals</button>
-        <button class="purpose-btn" data-purpose="advice_followup">Advice &<br>Follow-up</button>
-        <button class="purpose-btn" data-purpose="doctors_notes">Doctor's<br>Notes</button>
-        <button class="purpose-btn" data-purpose="clinical_notes">Clinical<br>Notes</button>
-        <button class="purpose-btn" data-purpose="summary">Summary</button>
+    <!-- LEFT: Input panel -->
+    <div class="card">
+      <div class="card-title">✏️ Input</div>
+
+      <div>
+        <label>Section Purpose</label>
+        <div class="purpose-grid" id="purpose-grid">
+          <button class="purpose-btn active" data-purpose="chief_complaint">Chief<br>Complaint</button>
+          <button class="purpose-btn" data-purpose="diagnosis">Diagnosis</button>
+          <button class="purpose-btn" data-purpose="investigations">Investiga-<br>tions</button>
+          <button class="purpose-btn" data-purpose="medications">Medications</button>
+          <button class="purpose-btn" data-purpose="procedures">Procedures</button>
+          <button class="purpose-btn" data-purpose="vitals">Vitals</button>
+          <button class="purpose-btn" data-purpose="advice_followup">Advice &<br>Follow-up</button>
+          <button class="purpose-btn" data-purpose="doctors_notes">Doctor's<br>Notes</button>
+          <button class="purpose-btn" data-purpose="clinical_notes">Clinical<br>Notes</button>
+          <button class="purpose-btn" data-purpose="summary">Summary</button>
+        </div>
+      </div>
+
+      <div>
+        <label>Medical Note Text</label>
+        <textarea id="input-text" rows="11"
+          placeholder="Type or paste the medical note here...&#10;&#10;Examples:&#10;• 'patient has high BP and sugar problems'&#10;• 'pt came with chest pain since 2 day, sweating, BP 158/96'&#10;• 'gave metformin 500mg two time daily for sugar'"></textarea>
+      </div>
+
+      <div class="input-meta">
+        <span id="word-count">0 words</span>
+        <span class="model-hint" id="model-hint">7B · fast</span>
+      </div>
+
+      <div>
+        <div class="context-toggle" onclick="toggleContext()">
+          <span id="ctx-arrow">▶</span>
+          <span>Add Context (other note sections)</span>
+        </div>
+        <div class="context-body" id="context-body">
+          <div class="context-row">
+            <label>Chief Complaint</label>
+            <input type="text" id="ctx-chief_complaint" placeholder="e.g. chest pain" />
+          </div>
+          <div class="context-row">
+            <label>Diagnosis</label>
+            <input type="text" id="ctx-diagnosis" placeholder="e.g. acute STEMI" />
+          </div>
+          <div class="context-row">
+            <label>Medications</label>
+            <input type="text" id="ctx-medications" placeholder="e.g. aspirin 75mg" />
+          </div>
+          <div class="context-row">
+            <label>Investigations</label>
+            <input type="text" id="ctx-investigations" placeholder="e.g. ECG, troponin" />
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btn-stream" onclick="doStream()">
+          ▶ Stream Rephrase
+        </button>
+        <button class="btn btn-outline" id="btn-instant" onclick="doInstant()">
+          ⚡ Instant
+        </button>
+      </div>
+      <button class="btn btn-clear" onclick="clearAll()">🗑 Clear</button>
+    </div>
+
+    <!-- RIGHT: Output panel -->
+    <div class="card">
+      <div class="card-title">📋 Rephrased Output</div>
+      <div class="status-bar" id="status-bar">
+        <span class="badge badge-idle" id="status-badge">Waiting...</span>
+      </div>
+      <div class="progress-bar" id="progress-bar">
+        <div class="progress-fill"></div>
+      </div>
+      <div class="output-box" id="output-box">
+        <span class="output-placeholder">Rephrased text will appear here...</span>
+      </div>
+      <div class="output-footer">
+        <span id="output-meta">—</span>
+        <button class="copy-btn" id="copy-btn" onclick="copyOutput('output-text')">Copy</button>
       </div>
     </div>
 
-    <!-- Text input -->
-    <div>
-      <label>Medical Note Text</label>
-      <textarea id="input-text" rows="11"
-        placeholder="Type or paste the medical note here...&#10;&#10;Examples:&#10;• 'patient has high BP and sugar problems'&#10;• 'pt came with chest pain since 2 day, sweating, BP 158/96'&#10;• 'gave metformin 500mg two time daily for sugar'"></textarea>
-    </div>
+  </div><!-- end panel-rephrase -->
 
-    <!-- Input meta -->
-    <div class="input-meta">
-      <span id="word-count">0 words</span>
-      <span class="model-hint" id="model-hint">7B · fast</span>
-    </div>
 
-    <!-- Context (collapsible) -->
-    <div>
-      <div class="context-toggle" onclick="toggleContext()">
-        <span id="ctx-arrow">▶</span>
-        <span>Add Context (other note sections)</span>
+  <!-- ════════════════════════════════════════════════════════════
+       TAB: TRANSLATE
+  ════════════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="panel-translate">
+
+    <!-- LEFT: Translate input panel -->
+    <div class="card">
+      <div class="card-title">🌐 Translate Input</div>
+
+      <!-- Language selector -->
+      <div>
+        <label>Target Language</label>
+        <div class="lang-grid" id="lang-grid">
+          <button class="lang-btn active" data-lang="hi">
+            Hindi<span class="lang-native">हिंदी</span>
+          </button>
+          <button class="lang-btn" data-lang="te">
+            Telugu<span class="lang-native">తెలుగు</span>
+          </button>
+          <button class="lang-btn" data-lang="ta">
+            Tamil<span class="lang-native">தமிழ்</span>
+          </button>
+          <button class="lang-btn" data-lang="kn">
+            Kannada<span class="lang-native">ಕನ್ನಡ</span>
+          </button>
+          <button class="lang-btn" data-lang="ml">
+            Malayalam<span class="lang-native">മലയാളം</span>
+          </button>
+          <button class="lang-btn" data-lang="mr">
+            Marathi<span class="lang-native">मराठी</span>
+          </button>
+          <button class="lang-btn" data-lang="bn">
+            Bengali<span class="lang-native">বাংলা</span>
+          </button>
+          <button class="lang-btn" data-lang="pa">
+            Punjabi<span class="lang-native">ਪੰਜਾਬੀ</span>
+          </button>
+          <button class="lang-btn" data-lang="gu">
+            Gujarati<span class="lang-native">ગુજરાતી</span>
+          </button>
+          <button class="lang-btn" data-lang="or">
+            Odia<span class="lang-native">ଓଡ଼ିଆ</span>
+          </button>
+          <button class="lang-btn" data-lang="as">
+            Assamese<span class="lang-native">অসমীয়া</span>
+          </button>
+        </div>
       </div>
-      <div class="context-body" id="context-body">
-        <div class="context-row">
-          <label>Chief Complaint</label>
-          <input type="text" id="ctx-chief_complaint" placeholder="e.g. chest pain" />
+
+      <!-- Domain toggle -->
+      <div>
+        <label>Domain</label>
+        <div class="domain-toggle" id="domain-toggle">
+          <button class="domain-btn active" data-domain="general">🗣 General</button>
+          <button class="domain-btn" data-domain="medical">🏥 Medical</button>
         </div>
-        <div class="context-row">
-          <label>Diagnosis</label>
-          <input type="text" id="ctx-diagnosis" placeholder="e.g. acute STEMI" />
-        </div>
-        <div class="context-row">
-          <label>Medications</label>
-          <input type="text" id="ctx-medications" placeholder="e.g. aspirin 75mg" />
-        </div>
-        <div class="context-row">
-          <label>Investigations</label>
-          <input type="text" id="ctx-investigations" placeholder="e.g. ECG, troponin" />
-        </div>
+      </div>
+
+      <!-- Text input -->
+      <div>
+        <label>Text to Translate</label>
+        <textarea id="tr-input" rows="9"
+          placeholder="Type or paste English text here...&#10;&#10;Examples:&#10;• 'Patient has high blood pressure and headache'&#10;• 'Take Metformin 500mg twice daily after meals'&#10;• 'Follow up after 2 weeks. Avoid alcohol.'"></textarea>
+      </div>
+
+      <div class="input-meta">
+        <span id="tr-word-count">0 words</span>
+        <span class="model-hint gemini" id="tr-model-hint">Gemini Flash Lite</span>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-green" id="btn-tr-stream" onclick="doTranslateStream()">
+          ▶ Stream Translate
+        </button>
+        <button class="btn btn-outline-green" id="btn-tr-instant" onclick="doTranslateInstant()">
+          ⚡ Instant
+        </button>
+      </div>
+      <button class="btn btn-clear" onclick="clearTranslate()">🗑 Clear</button>
+    </div>
+
+    <!-- RIGHT: Translation output panel -->
+    <div class="card">
+      <div class="card-title" id="tr-output-title">📄 Translation</div>
+      <div class="status-bar" id="tr-status-bar">
+        <span class="badge badge-idle" id="tr-status-badge">Waiting...</span>
+      </div>
+      <div class="progress-bar" id="tr-progress-bar">
+        <div class="progress-fill green"></div>
+      </div>
+      <div class="output-box translate-box" id="tr-output-box">
+        <span class="output-placeholder">Translation will appear here in the target language script...</span>
+      </div>
+      <div class="output-footer">
+        <span id="tr-output-meta">—</span>
+        <button class="copy-btn" id="tr-copy-btn" onclick="copyTranslation()">Copy</button>
       </div>
     </div>
 
-    <!-- Buttons -->
-    <div class="btn-group">
-      <button class="btn btn-primary" id="btn-stream" onclick="doStream()">
-        ▶ Stream Rephrase
-      </button>
-      <button class="btn btn-outline" id="btn-instant" onclick="doInstant()">
-        ⚡ Instant
-      </button>
-    </div>
-    <button class="btn btn-clear" onclick="clearAll()">🗑 Clear</button>
-  </div>
+  </div><!-- end panel-translate -->
 
-  <!-- ── RIGHT: Output panel ────────────────────────────────────── -->
-  <div class="card">
-    <div class="card-title">📋 Rephrased Output</div>
-
-    <!-- Status bar -->
-    <div class="status-bar" id="status-bar">
-      <span class="badge badge-idle" id="status-badge">Waiting...</span>
-    </div>
-
-    <!-- Progress bar -->
-    <div class="progress-bar" id="progress-bar">
-      <div class="progress-fill"></div>
-    </div>
-
-    <!-- Output -->
-    <div class="output-box" id="output-box">
-      <span class="output-placeholder">Rephrased text will appear here...</span>
-    </div>
-
-    <!-- Footer -->
-    <div class="output-footer">
-      <span id="output-meta">—</span>
-      <button class="copy-btn" id="copy-btn" onclick="copyOutput()">Copy</button>
-    </div>
-  </div>
-
-</div>
+</div><!-- end layout -->
 
 <script>
-// ── State ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// TRANSLATE API base URL — change if running on a different host/port
+// ─────────────────────────────────────────────────────────────────
+const TRANSLATE_API = 'http://localhost:8008';
+
+// ── Tab switcher ─────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`panel-${name}`).classList.add('active');
+  document.getElementById(`tab-btn-${name}`).classList.add('active');
+}
+
+// ═════════════════════════════════════════════════════════════════
+// REPHRASE TAB
+// ═════════════════════════════════════════════════════════════════
 let selectedPurpose = 'chief_complaint';
 let isStreaming = false;
 let streamController = null;
 let outputText = '';
 let startTime = 0;
 
-// ── Purpose selector ─────────────────────────────────────────────
 document.querySelectorAll('.purpose-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.purpose-btn').forEach(b => b.classList.remove('active'));
@@ -428,7 +655,6 @@ function updateModelHint() {
 
 document.getElementById('input-text').addEventListener('input', updateModelHint);
 
-// ── Context toggle ───────────────────────────────────────────────
 function toggleContext() {
   const body  = document.getElementById('context-body');
   const arrow = document.getElementById('ctx-arrow');
@@ -448,7 +674,6 @@ function getContext() {
 
 function getInputText() { return document.getElementById('input-text').value; }
 
-// ── Clear ────────────────────────────────────────────────────────
 function clearAll() {
   if (isStreaming && streamController) streamController.abort();
   document.getElementById('input-text').value = '';
@@ -469,20 +694,14 @@ function resetOutput() {
   isStreaming = false;
 }
 
-// ── Status helper ─────────────────────────────────────────────────
 function setStatus(type, text) {
   const badge = document.getElementById('status-badge');
   badge.className = `badge badge-${type}`;
   badge.textContent = text;
 }
 
-// ── Render markdown (basic) ──────────────────────────────────────
 function renderMarkdown(raw) {
-  const escaped = raw
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
+  const escaped = raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   return escaped
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/^#{1,2} (.+)$/gm, '<span class="md-h">$1</span>')
@@ -490,7 +709,6 @@ function renderMarkdown(raw) {
     .replace(/\n/g, '<br>');
 }
 
-// ── STREAM REPHRASE ──────────────────────────────────────────────
 async function doStream() {
   const text = getInputText().trim();
   if (!text) { alert('Please enter some text first.'); return; }
@@ -521,42 +739,26 @@ async function doStream() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: streamController.signal,
-      body: JSON.stringify({
-        text,
-        purpose: selectedPurpose,
-        context: getContext(),
-        patient_id: 'ui-session',
-      }),
+      body: JSON.stringify({ text, purpose: selectedPurpose, context: getContext(), patient_id: 'ui-session' }),
     });
-
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
-    }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
 
-    // labeled break so [DONE] exits all three loops at once
     outer: while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
       rawBuf += decoder.decode(value, { stream: true });
-      // SSE messages are separated by \n\n
       const parts = rawBuf.split('\n\n');
-      rawBuf = parts.pop(); // keep incomplete trailing chunk
-
+      rawBuf = parts.pop();
       for (const part of parts) {
         for (const line of part.split('\n')) {
-          if (line.startsWith('event: error')) {
-            throw new Error('Server error during stream');
-          }
+          if (line.startsWith('event: error')) throw new Error('Server error during stream');
           if (line.startsWith('data: ')) {
             const raw = line.slice(6);
             if (raw === '[DONE]') break outer;
-            // Server JSON-encodes tokens so \n and special chars survive SSE framing
-            let token;
-            try { token = JSON.parse(raw); } catch { token = raw; }
+            let token; try { token = JSON.parse(raw); } catch { token = raw; }
             outputText += token;
             box.insertBefore(document.createTextNode(token), cursor);
             box.scrollTop = box.scrollHeight;
@@ -564,19 +766,13 @@ async function doStream() {
         }
       }
     }
-
-    // Apply markdown rendering now that we have the full text
     cursor.remove();
     box.innerHTML = renderMarkdown(outputText);
-
     const ms = Math.round(performance.now() - startTime);
-    const inW  = text.split(/\s+/).filter(Boolean).length;
+    const inW = text.split(/\s+/).filter(Boolean).length;
     const outW = outputText.split(/\s+/).filter(Boolean).length;
-
     setStatus('pass', '✓ Done');
-    document.getElementById('output-meta').textContent =
-      `${inW} words in → ${outW} words out  ·  ${(ms/1000).toFixed(1)}s`;
-
+    document.getElementById('output-meta').textContent = `${inW} words in → ${outW} words out  ·  ${(ms/1000).toFixed(1)}s`;
   } catch (e) {
     if (e.name !== 'AbortError') {
       setStatus('error', '✕ Error');
@@ -595,7 +791,6 @@ async function doStream() {
   }
 }
 
-// ── INSTANT REPHRASE ─────────────────────────────────────────────
 async function doInstant() {
   const text = getInputText().trim();
   if (!text) { alert('Please enter some text first.'); return; }
@@ -603,10 +798,8 @@ async function doInstant() {
 
   outputText = '';
   startTime = performance.now();
-
   const box = document.getElementById('output-box');
   box.innerHTML = '<span class="output-placeholder">Thinking...</span>';
-
   document.getElementById('progress-bar').classList.add('active');
   document.getElementById('btn-stream').disabled = true;
   document.getElementById('btn-instant').disabled = true;
@@ -616,34 +809,21 @@ async function doInstant() {
     const resp = await fetch('/rephrase', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        purpose: selectedPurpose,
-        context: getContext(),
-        patient_id: 'ui-session',
-      }),
+      body: JSON.stringify({ text, purpose: selectedPurpose, context: getContext(), patient_id: 'ui-session' }),
     });
-
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
-
-    const ms   = Math.round(performance.now() - startTime);
+    const ms = Math.round(performance.now() - startTime);
     outputText = data.rephrased || '';
-
-    // Render markdown
     box.innerHTML = renderMarkdown(outputText);
-
-    const inW  = text.split(/\s+/).filter(Boolean).length;
+    const inW = text.split(/\s+/).filter(Boolean).length;
     const outW = outputText.split(/\s+/).filter(Boolean).length;
-
     if (data.fallback) {
       setStatus('fallback', '⚠ Fallback — original returned');
     } else {
       setStatus('pass', '✓ Done');
     }
-    document.getElementById('output-meta').textContent =
-      `${inW} words in → ${outW} words out  ·  ${(ms/1000).toFixed(1)}s`;
-
+    document.getElementById('output-meta').textContent = `${inW} words in → ${outW} words out  ·  ${(ms/1000).toFixed(1)}s`;
   } catch (e) {
     setStatus('error', '✕ Error: ' + e.message);
     box.innerHTML = '<span style="color:#991b1b">Request failed: ' + e.message + '</span>';
@@ -654,16 +834,229 @@ async function doInstant() {
   }
 }
 
-// ── Copy ─────────────────────────────────────────────────────────
 function copyOutput() {
   if (!outputText) return;
   navigator.clipboard.writeText(outputText).then(() => {
     const btn = document.getElementById('copy-btn');
-    btn.textContent = '✓ Copied!';
-    btn.classList.add('copied');
+    btn.textContent = '✓ Copied!'; btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
   });
 }
+
+document.getElementById('input-text').addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); doStream(); }
+});
+
+
+// ═════════════════════════════════════════════════════════════════
+// TRANSLATE TAB
+// ═════════════════════════════════════════════════════════════════
+let selectedLang    = 'hi';
+let selectedDomain  = 'general';
+let trStreaming      = false;
+let trController    = null;
+let trOutputText    = '';
+
+const LANG_NAMES = {
+  hi:'Hindi', te:'Telugu', ta:'Tamil', kn:'Kannada', ml:'Malayalam',
+  mr:'Marathi', bn:'Bengali', pa:'Punjabi', gu:'Gujarati', or:'Odia', as:'Assamese'
+};
+
+// Language buttons
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedLang = btn.dataset.lang;
+    updateTrTitle();
+  });
+});
+
+// Domain buttons
+document.querySelectorAll('.domain-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.domain-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedDomain = btn.dataset.domain;
+  });
+});
+
+document.getElementById('tr-input').addEventListener('input', () => {
+  const words = document.getElementById('tr-input').value.split(/\s+/).filter(Boolean).length;
+  document.getElementById('tr-word-count').textContent = `${words} word${words !== 1 ? 's' : ''}`;
+});
+
+function updateTrTitle() {
+  document.getElementById('tr-output-title').textContent = `📄 Translation → ${LANG_NAMES[selectedLang]}`;
+}
+
+function setTrStatus(type, text) {
+  const badge = document.getElementById('tr-status-badge');
+  badge.className = `badge badge-${type}`;
+  badge.textContent = text;
+}
+
+function clearTranslate() {
+  if (trStreaming && trController) trController.abort();
+  document.getElementById('tr-input').value = '';
+  document.getElementById('tr-word-count').textContent = '0 words';
+  resetTrOutput();
+}
+
+function resetTrOutput() {
+  trOutputText = '';
+  const box = document.getElementById('tr-output-box');
+  box.innerHTML = '<span class="output-placeholder">Translation will appear here in the target language script...</span>';
+  box.classList.remove('streaming-green');
+  setTrStatus('idle', 'Waiting...');
+  document.getElementById('tr-progress-bar').classList.remove('active');
+  document.getElementById('tr-output-meta').textContent = '—';
+  document.getElementById('btn-tr-stream').disabled = false;
+  document.getElementById('btn-tr-instant').disabled = false;
+  trStreaming = false;
+}
+
+async function doTranslateStream() {
+  const text = document.getElementById('tr-input').value.trim();
+  if (!text) { alert('Please enter some text to translate.'); return; }
+  if (trStreaming) { trController?.abort(); return; }
+
+  trStreaming = true;
+  trOutputText = '';
+  const t0 = performance.now();
+
+  const box = document.getElementById('tr-output-box');
+  box.innerHTML = '';
+  box.classList.add('streaming-green');
+
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor green';
+  box.appendChild(cursor);
+
+  document.getElementById('tr-progress-bar').classList.add('active');
+  document.getElementById('btn-tr-stream').disabled = true;
+  document.getElementById('btn-tr-instant').disabled = true;
+  setTrStatus('stream-green', `⏳ Translating to ${LANG_NAMES[selectedLang]}...`);
+
+  trController = new AbortController();
+  let rawBuf = '';
+
+  try {
+    const resp = await fetch(`${TRANSLATE_API}/translate/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: trController.signal,
+      body: JSON.stringify({ text, target_language: selectedLang, domain: selectedDomain }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+
+    outer: while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      rawBuf += decoder.decode(value, { stream: true });
+      const parts = rawBuf.split('\n\n');
+      rawBuf = parts.pop();
+      for (const part of parts) {
+        for (const line of part.split('\n')) {
+          if (line.startsWith('event: error')) throw new Error('Server error during stream');
+          if (line.startsWith('data: ')) {
+            let parsed; try { parsed = JSON.parse(line.slice(6)); } catch { continue; }
+            if (parsed.done) break outer;
+            const chunk = parsed.chunk || '';
+            trOutputText += chunk;
+            box.insertBefore(document.createTextNode(chunk), cursor);
+            box.scrollTop = box.scrollHeight;
+          }
+        }
+      }
+    }
+
+    cursor.remove();
+    const ms = Math.round(performance.now() - t0);
+    const inW = text.split(/\s+/).filter(Boolean).length;
+    setTrStatus('pass', `✓ ${LANG_NAMES[selectedLang]} translation done`);
+    document.getElementById('tr-output-meta').textContent =
+      `${inW} words in  ·  ${(ms/1000).toFixed(1)}s  ·  Gemini 2.5 Flash Lite`;
+    updateTrTitle();
+
+  } catch (e) {
+    cursor.remove();
+    if (e.name !== 'AbortError') {
+      setTrStatus('error', '✕ Error');
+      box.innerHTML = `<span style="color:#991b1b">Translation failed: ${e.message}</span>`;
+    } else {
+      setTrStatus('idle', 'Cancelled');
+    }
+  } finally {
+    box.classList.remove('streaming-green');
+    document.getElementById('tr-progress-bar').classList.remove('active');
+    document.getElementById('btn-tr-stream').disabled = false;
+    document.getElementById('btn-tr-instant').disabled = false;
+    trStreaming = false;
+  }
+}
+
+async function doTranslateInstant() {
+  const text = document.getElementById('tr-input').value.trim();
+  if (!text) { alert('Please enter some text to translate.'); return; }
+  if (trStreaming) return;
+
+  trOutputText = '';
+  const t0 = performance.now();
+  const box = document.getElementById('tr-output-box');
+  box.innerHTML = '<span class="output-placeholder">Translating...</span>';
+  document.getElementById('tr-progress-bar').classList.add('active');
+  document.getElementById('btn-tr-stream').disabled = true;
+  document.getElementById('btn-tr-instant').disabled = true;
+  setTrStatus('stream-green', `⏳ Translating to ${LANG_NAMES[selectedLang]}...`);
+
+  try {
+    const resp = await fetch(`${TRANSLATE_API}/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, target_language: selectedLang, domain: selectedDomain }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+
+    const ms = Math.round(performance.now() - t0);
+    trOutputText = data.translated || '';
+    box.textContent = trOutputText;
+
+    const inW = text.split(/\s+/).filter(Boolean).length;
+    setTrStatus('pass', `✓ ${data.language_name} translation done`);
+    document.getElementById('tr-output-meta').textContent =
+      `${inW} words in  ·  ${(ms/1000).toFixed(1)}s  ·  Gemini 2.5 Flash Lite`;
+    updateTrTitle();
+
+  } catch (e) {
+    setTrStatus('error', '✕ Error: ' + e.message);
+    box.innerHTML = `<span style="color:#991b1b">Translation failed: ${e.message}</span>`;
+  } finally {
+    document.getElementById('tr-progress-bar').classList.remove('active');
+    document.getElementById('btn-tr-stream').disabled = false;
+    document.getElementById('btn-tr-instant').disabled = false;
+  }
+}
+
+function copyTranslation() {
+  if (!trOutputText) return;
+  navigator.clipboard.writeText(trOutputText).then(() => {
+    const btn = document.getElementById('tr-copy-btn');
+    btn.textContent = '✓ Copied!'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+document.getElementById('tr-input').addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); doTranslateStream(); }
+});
 
 // ── Health check on load ─────────────────────────────────────────
 (async () => {
@@ -677,11 +1070,6 @@ function copyOutput() {
     document.getElementById('api-status').className = 'badge badge-error';
   }
 })();
-
-// ── Keyboard shortcut: Ctrl+Enter to stream ──────────────────────
-document.getElementById('input-text').addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); doStream(); }
-});
 </script>
 </body>
 </html>

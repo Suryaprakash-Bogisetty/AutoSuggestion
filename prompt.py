@@ -57,7 +57,7 @@ REPHRASE_PURPOSE_HINTS = {
     "vitals":          "Rephrase to state each vital sign clearly with appropriate labels and units.",
     "advice_followup": "Rephrase as clear, formal patient instructions with specific timelines.",
     "doctors_notes":   "Rephrase as a structured clinical note with formal observations, impressions, and management plan.",
-    "summary":         "Rephrase as a concise, formal medical summary highlighting key findings.",
+    "summary":         "Rephrase as a concise, formal medical summary highlighting key findings in the form of bullet points and not a paragraph.",
     "clinical_notes":  "Rephrase as a structured and professional clinical note, detailing history and exam findings.",
 }
 
